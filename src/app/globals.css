@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 17, 24, 39;
+  --background-end-rgb: 31, 41, 55;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--background-start-rgb)),
+    rgb(var(--background-end-rgb))
+  );
+  min-height: 100vh;
+}
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-primary-600 px-6 py-2.5 text-center font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-300 disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-gray-600 bg-transparent px-6 py-2.5 text-center font-medium text-white hover:border-gray-500 hover:bg-gray-800/50 focus:outline-none focus:ring-4 focus:ring-gray-700 disabled:opacity-50;
+  }
+
+  .input {
+    @apply block w-full rounded-lg border border-gray-600 bg-gray-700 p-2.5 text-white placeholder-gray-400 focus:border-primary-500 focus:ring-primary-500;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-200;
+  }
+
+  .hover-lift {
+    @apply transform transition-all duration-200 hover:-translate-y-1;
+  }
+}
+
+/* Animações suaves */
+.transition-all {
+  @apply transition-all duration-200;
+}
+
+/* Efeitos de hover elegantes */
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary-200 rounded-full hover:bg-primary-300;
+}
