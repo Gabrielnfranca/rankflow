@@ -155,7 +155,7 @@ export default function Home() {
       <footer className="py-8 border-t border-gray-800">
         <div className="container mx-auto px-4">
           <div className="text-center text-gray-500 text-sm">
-            2024 RankFlow. Todos os direitos reservados.
+            &copy; 2024 RankFlow. Todos os direitos reservados.
           </div>
         </div>
       </footer>
