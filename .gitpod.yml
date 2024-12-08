@@ -16,6 +16,9 @@ github:
     master: true
     branches: true
     pullRequests: true
-    pullRequestsFromForks: true
-    addCheck: true
-    addComment: false
+
+vscode:
+  extensions:
+    - dbaeumer.vscode-eslint
+    - esbenp.prettier-vscode
+    - bradlc.vscode-tailwindcss
