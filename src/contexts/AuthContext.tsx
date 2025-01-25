@@ -1,15 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-}
+import { supabase, Profile, getCurrentUser } from '../lib/supabase';
 
 interface AuthContextType {
-  user: User | null;
+  user: Profile | null;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   loading: boolean;
@@ -17,84 +12,121 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Usuário fake para demonstração
-const DEMO_USER = {
-  id: '1',
-  email: 'demo@rankflow.com',
-  password: 'rankflow123',
-  name: 'Usuário Demo'
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar se há um usuário salvo no localStorage
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
+    // Verificar usuário atual
+    checkUser();
+
+    // Escutar mudanças de autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN') {
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string) => {
-    setLoading(true);
+  async function checkUser() {
     try {
-      // Simular delay de rede
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      if (email === DEMO_USER.email && password === DEMO_USER.password) {
-        const userData = {
-          id: DEMO_USER.id,
-          email: DEMO_USER.email,
-          name: DEMO_USER.name
-        };
-        setUser(userData);
-        localStorage.setItem('user', JSON.stringify(userData));
-      } else {
-        throw new Error('Credenciais inválidas');
-      }
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Error checking user:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-  };
-
-  const register = async (email: string, password: string, name: string) => {
-    setLoading(true);
+  async function login(email: string, password: string) {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      throw new Error('Registro temporariamente desabilitado. Use a conta demo.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-  const resetPassword = async (email: string) => {
-    setLoading(true);
+      if (error) throw error;
+      
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Error logging in:', error);
+      throw error;
+    }
+  }
+
+  async function logout() {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (email === DEMO_USER.email) {
-        // Simular envio de email
-        console.log('Email de recuperação enviado para:', email);
-      } else {
-        throw new Error('Email não encontrado');
-      }
-    } finally {
-      setLoading(false);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setUser(null);
+    } catch (error) {
+      console.error('Error logging out:', error);
+      throw error;
     }
+  }
+
+  async function register(email: string, password: string, name: string) {
+    try {
+      const { data: { user: newUser }, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      if (!newUser?.id) throw new Error('No user returned after registration');
+
+      // Criar perfil do usuário
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: newUser.id,
+            email,
+            name,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ]);
+
+      if (profileError) throw profileError;
+
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Error registering:', error);
+      throw error;
+    }
+  }
+
+  async function resetPassword(email: string) {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      throw error;
+    }
+  }
+
+  const value = {
+    user,
+    login,
+    logout,
+    register,
+    resetPassword,
+    loading,
   };
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, register, resetPassword, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
