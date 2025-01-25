@@ -8,120 +8,124 @@ export function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [error, setError] = useState('');
-  const { register, loading } = useAuth();
+  const { register, loading, error: authError } = useAuth();
   const navigate = useNavigate();
   const { theme } = useTheme();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     try {
       await register(email, password, name);
+      // Após registro bem-sucedido, redirecionar para a página inicial
       navigate('/');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error) {
+      // O erro já está sendo tratado no AuthContext
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className={`max-w-md w-full space-y-8 p-8 rounded-xl shadow-lg ${
-        theme === 'dark' ? 'bg-gray-800' : 'bg-white'
-      }`}>
+    <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100'}`}>
+      <div className={`max-w-md w-full space-y-8 p-8 rounded-lg shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
         <div>
-          <h1 className="text-3xl font-bold text-center mb-2">RankFlow</h1>
-          <h2 className="text-xl font-semibold text-center">Criar conta</h2>
-          {error && (
-            <div className="mt-4 p-3 rounded bg-red-100 border border-red-400 text-red-700">
-              {error}
-            </div>
-          )}
+          <h2 className={`mt-6 text-center text-3xl font-extrabold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            Criar nova conta
+          </h2>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
+          <div className="rounded-md shadow-sm space-y-4">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium mb-1">
+              <label htmlFor="name" className={`block text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
                 Nome
               </label>
               <input
                 id="name"
                 type="text"
+                required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                required
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 ${
-                  theme === 'dark'
-                    ? 'bg-gray-700 border-gray-600 text-white'
-                    : 'bg-white border-gray-300'
-                }`}
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-700 text-white' : 'border-gray-300 text-gray-900'
+                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
                 placeholder="Seu nome"
               />
             </div>
+
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1">
+              <label htmlFor="email" className={`block text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
                 Email
               </label>
               <input
                 id="email"
                 type="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 ${
-                  theme === 'dark'
-                    ? 'bg-gray-700 border-gray-600 text-white'
-                    : 'bg-white border-gray-300'
-                }`}
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-700 text-white' : 'border-gray-300 text-gray-900'
+                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
                 placeholder="seu@email.com"
               />
             </div>
+
             <div>
-              <label htmlFor="password" className="block text-sm font-medium mb-1">
+              <label htmlFor="password" className={`block text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
                 Senha
               </label>
               <input
                 id="password"
                 type="password"
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 ${
-                  theme === 'dark'
-                    ? 'bg-gray-700 border-gray-600 text-white'
-                    : 'bg-white border-gray-300'
-                }`}
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-700 text-white' : 'border-gray-300 text-gray-900'
+                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
                 placeholder="••••••••"
               />
             </div>
           </div>
 
-          <div className="text-sm">
-            <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
-              Já tem uma conta? Faça login
-            </Link>
+          {authError && (
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">{authError}</h3>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                loading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
+            >
+              {loading ? (
+                <Loader2 className="animate-spin h-5 w-5" />
+              ) : (
+                <>
+                  <UserPlus className="h-5 w-5 mr-2" />
+                  Criar conta
+                </>
+              )}
+            </button>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full flex items-center justify-center px-4 py-2 rounded-lg text-white font-medium ${
-              loading
-                ? 'bg-blue-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <UserPlus className="w-5 h-5 mr-2" />
-                Criar conta
-              </>
-            )}
-          </button>
+          <div className="text-center">
+            <Link
+              to="/login"
+              className={`font-medium ${
+                theme === 'dark' ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'
+              }`}
+            >
+              Já tem uma conta? Entre aqui
+            </Link>
+          </div>
         </form>
       </div>
     </div>
