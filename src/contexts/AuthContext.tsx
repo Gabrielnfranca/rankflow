@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       throw error;
     } finally {
-      setLoading(false);
+      setLoading(false); // Garante que o loading é resetado mesmo em caso de erro
     }
   }
 

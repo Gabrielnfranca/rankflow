@@ -21,6 +21,7 @@ export function Login() {
       navigate('/');
     } catch (err) {
       setError('Email ou senha incorretos');
+      // Não é necessário resetar o loading aqui pois o AuthContext já faz isso no finally
     }
   };
 
