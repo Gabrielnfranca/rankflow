@@ -17,7 +17,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastAttempt, setLastAttempt] = useState<number>(0);
 
   useEffect(() => {
     checkUser();
@@ -54,15 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-
-      // Verificar cooldown
-      const now = Date.now();
-      if (now - lastAttempt < 31000) {
-        const remainingTime = Math.ceil((31000 - (now - lastAttempt)) / 1000);
-        throw new Error(`Por favor, aguarde ${remainingTime} segundos antes de tentar novamente.`);
-      }
-
-      setLastAttempt(now);
 
       const { error } = await supabase.auth.signInWithPassword({
         email,
