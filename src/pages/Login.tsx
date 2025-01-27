@@ -18,10 +18,13 @@ export function Login() {
 
     try {
       await login(email, password);
-      navigate('/');
-    } catch (err) {
-      setError('Email ou senha incorretos');
-      // Não é necessário resetar o loading aqui pois o AuthContext já faz isso no finally
+      // Aguarda um pequeno intervalo para garantir que o estado foi atualizado
+      setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 500);
+    } catch (err: any) {
+      console.error('Erro no login:', err);
+      setError(err.message || 'Email ou senha incorretos');
     }
   };
 

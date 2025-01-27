@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Clients } from './pages/Clients';
@@ -24,6 +24,23 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    if (!loading && !user) {
+      timeoutId = setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 100);
+    }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [loading, user, navigate]);
 
   if (loading) {
     return (
@@ -34,7 +51,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" />;
+    return null; // O useEffect cuidará do redirecionamento
   }
 
   return <>{children}</>;
