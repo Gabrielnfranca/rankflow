@@ -19,40 +19,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
+    async function checkUser() {
+      try {
+        // Primeiro, verifica a sessão
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Erro ao verificar sessão:', sessionError);
+          throw sessionError;
+        }
+
+        if (!session) {
+          // Se não há sessão, limpa o estado e finaliza
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Se há sessão, busca o usuário atual
+        const currentUser = await getCurrentUser();
+        if (mounted) {
+          setUser(currentUser);
+          setError(null);
+        }
+      } catch (error) {
+        console.error('Error checking user:', error);
+        if (mounted) {
+          setError('Erro ao verificar usuário');
+          // Em caso de erro, tenta limpar a sessão
+          await supabase.auth.signOut();
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    // Verifica o usuário inicial
     checkUser();
+
+    // Configura o listener de mudança de estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session);
+      
       if (event === 'SIGNED_IN') {
         const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        setError(null);
+        if (mounted) {
+          setUser(currentUser);
+          setError(null);
+        }
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setError(null);
+        if (mounted) {
+          setUser(null);
+          setError(null);
+        }
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Recarrega o usuário quando o token é atualizado
+        checkUser();
       }
     });
 
+    // Cleanup
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
-
-  async function checkUser() {
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-      setError(null);
-    } catch (error) {
-      console.error('Error checking user:', error);
-      setError('Erro ao verificar usuário');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function login(email: string, password: string) {
     try {
       setLoading(true);
       setError(null);
+
+      // Primeiro, tenta fazer logout para limpar qualquer sessão existente
+      await supabase.auth.signOut();
 
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -72,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       throw error;
     } finally {
-      setLoading(false); // Garante que o loading é resetado mesmo em caso de erro
+      setLoading(false);
     }
   }
 
@@ -80,9 +126,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       setError(null);
+      
+      // Limpa o cache do Supabase
+      localStorage.removeItem('supabase.auth.token');
+      
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      
       setUser(null);
+      
+      // Força um reload da página após o logout
+      window.location.href = '/';
     } catch (error: any) {
       console.error('Error logging out:', error);
       setError(error.message);
