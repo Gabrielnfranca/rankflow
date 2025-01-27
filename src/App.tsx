@@ -27,22 +27,13 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
     if (!loading && !user) {
-      timeoutId = setTimeout(() => {
-        navigate('/login', { replace: true });
-      }, 100);
+      navigate('/login', { replace: true });
     }
-
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
   }, [loading, user, navigate]);
 
-  if (loading) {
+  // Mostra loading apenas se estiver carregando E não tivermos informação do usuário
+  if (loading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
@@ -50,10 +41,12 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Se não está carregando e não tem usuário, não renderiza nada (useEffect cuidará do redirecionamento)
   if (!user) {
-    return null; // O useEffect cuidará do redirecionamento
+    return null;
   }
 
+  // Se tem usuário, renderiza o conteúdo
   return <>{children}</>;
 }
 

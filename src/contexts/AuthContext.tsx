@@ -17,56 +17,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
+  // Função para buscar usuário atual
+  const fetchCurrentUser = async () => {
+    try {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      setError('Erro ao buscar usuário');
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Efeito para inicialização
   useEffect(() => {
     let mounted = true;
 
-    async function initializeAuth() {
+    const initialize = async () => {
       try {
-        const currentUser = await getCurrentUser();
+        // Verifica se já tem uma sessão
+        const { data: { session } } = await supabase.auth.getSession();
+        
         if (mounted) {
-          setUser(currentUser);
-          setError(null);
+          if (session) {
+            await fetchCurrentUser();
+          } else {
+            setUser(null);
+            setLoading(false);
+          }
+          setInitialized(true);
         }
       } catch (error) {
-        console.error('Error initializing auth:', error);
+        console.error('Error in initialization:', error);
         if (mounted) {
-          setError('Erro ao inicializar autenticação');
-        }
-      } finally {
-        if (mounted) {
+          setError('Erro na inicialização');
+          setUser(null);
           setLoading(false);
+          setInitialized(true);
         }
       }
-    }
+    };
 
-    // Inicializa a autenticação
-    initializeAuth();
+    initialize();
 
-    // Configura o listener de mudança de estado de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session);
-      
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (mounted) {
-          setLoading(true);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, { session });
+
+      if (!mounted) return;
+
+      setLoading(true);
+
+      try {
+        switch (event) {
+          case 'INITIAL_SESSION':
+          case 'SIGNED_IN':
+            await fetchCurrentUser();
+            break;
+          case 'SIGNED_OUT':
+            setUser(null);
+            setError(null);
+            setLoading(false);
+            break;
+          case 'TOKEN_REFRESHED':
+            await fetchCurrentUser();
+            break;
+          default:
+            setLoading(false);
         }
-        const currentUser = await getCurrentUser();
-        if (mounted) {
-          setUser(currentUser);
-          setError(null);
-          setLoading(false);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        if (mounted) {
-          setUser(null);
-          setError(null);
-          setLoading(false);
-        }
+      } catch (error) {
+        console.error('Error in auth state change:', error);
+        setError('Erro na mudança de estado');
+        setUser(null);
+        setLoading(false);
       }
     });
 
-    // Cleanup
     return () => {
       mounted = false;
       subscription.unsubscribe();
@@ -84,23 +116,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) throw error;
-      
-      const currentUser = await getCurrentUser();
-      if (!currentUser) {
-        throw new Error('Erro ao obter dados do usuário');
-      }
-      
-      setUser(currentUser);
+
+      await fetchCurrentUser();
     } catch (error: any) {
       console.error('Error logging in:', error);
-      if (error.message.includes('Invalid login credentials')) {
-        setError('Email ou senha incorretos');
-      } else {
-        setError(error.message);
-      }
-      throw error;
-    } finally {
+      setError(error.message);
       setLoading(false);
+      throw error;
     }
   }
 
@@ -108,23 +130,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-      
+
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
+
       setUser(null);
-      
-      // Limpa o cache do Supabase
       localStorage.removeItem('rankflow-auth');
       
-      // Força um reload da página após o logout
+      // Limpa qualquer estado persistido
+      window.sessionStorage.clear();
+      window.localStorage.clear();
+      
+      // Força um reload completo da aplicação
       window.location.href = '/login';
     } catch (error: any) {
       console.error('Error logging out:', error);
       setError(error.message);
-      throw error;
-    } finally {
       setLoading(false);
+      throw error;
     }
   }
 
@@ -188,6 +211,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       throw error;
     }
+  }
+
+  // Só renderiza o conteúdo após a inicialização
+  if (!initialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   const value = {
