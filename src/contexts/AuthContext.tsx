@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setUser(currentUser);
           setError(null);
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error checking user:', error);
@@ -53,9 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Em caso de erro, tenta limpar a sessão
           await supabase.auth.signOut();
           setUser(null);
-        }
-      } finally {
-        if (mounted) {
           setLoading(false);
         }
       }
@@ -73,11 +71,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setUser(currentUser);
           setError(null);
+          setLoading(false);
         }
       } else if (event === 'SIGNED_OUT') {
         if (mounted) {
           setUser(null);
           setError(null);
+          setLoading(false);
         }
       } else if (event === 'TOKEN_REFRESHED') {
         // Recarrega o usuário quando o token é atualizado
@@ -109,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      setLoading(false);
     } catch (error: any) {
       console.error('Error logging in:', error);
       if (error.message.includes('Invalid login credentials')) {
@@ -116,9 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setError(error.message);
       }
-      throw error;
-    } finally {
       setLoading(false);
+      throw error;
     }
   }
 
@@ -134,15 +134,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       
       setUser(null);
+      setLoading(false);
       
       // Força um reload da página após o logout
-      window.location.href = '/';
+      window.location.href = '/login';
     } catch (error: any) {
       console.error('Error logging out:', error);
       setError(error.message);
-      throw error;
-    } finally {
       setLoading(false);
+      throw error;
     }
   }
 
@@ -180,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const currentUser = await getCurrentUser();
       setUser(currentUser);
+      setLoading(false);
     } catch (error: any) {
       console.error('Error registering:', error);
       if (error.message.includes('User already registered')) {
@@ -187,9 +188,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setError(error.message);
       }
-      throw error;
-    } finally {
       setLoading(false);
+      throw error;
     }
   }
 
@@ -199,12 +199,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       const { error } = await supabase.auth.resetPasswordForEmail(email);
       if (error) throw error;
+      setLoading(false);
     } catch (error: any) {
       console.error('Error resetting password:', error);
       setError(error.message);
-      throw error;
-    } finally {
       setLoading(false);
+      throw error;
     }
   }
 
