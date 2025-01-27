@@ -34,7 +34,7 @@ interface Task {
   color?: string;
   time?: string;
   completedAt?: string;
-  userId: string;
+  user_id: string;
   created_at?: string;
 }
 
@@ -84,7 +84,7 @@ export function Tasks() {
       order: tasks.filter(t => t.status === 'pendente').length,
       ...taskData,
       labels: taskData.labels || [],
-      userId: '' // será preenchido pelo contexto
+      user_id: '' // será preenchido pelo contexto
     };
     
     addTask(newTask);

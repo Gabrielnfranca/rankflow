@@ -15,7 +15,7 @@ interface Task {
   color?: string;
   time?: string;
   completedAt?: string;
-  userId: string; 
+  user_id: string; 
 }
 
 interface TaskContextType {
@@ -42,7 +42,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('userId', user.id)
+        .eq('user_id', user.id)
         .order('order');
 
       if (error) {
@@ -88,10 +88,10 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    console.log('Adicionando tarefa:', { ...task, userId: user.id });
+    console.log('Adicionando tarefa:', { ...task, user_id: user.id });
     const { data, error } = await supabase
       .from('tasks')
-      .insert([{ ...task, userId: user.id }])
+      .insert([{ ...task, user_id: user.id }])
       .select()
       .single();
 
@@ -118,7 +118,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       .from('tasks')
       .update(updates)
       .eq('id', id)
-      .eq('userId', user.id); 
+      .eq('user_id', user.id);
 
     if (error) {
       console.error('Erro ao atualizar tarefa:', error);
@@ -143,7 +143,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       .from('tasks')
       .delete()
       .eq('id', id)
-      .eq('userId', user.id); 
+      .eq('user_id', user.id);
 
     if (error) {
       console.error('Erro ao deletar tarefa:', error);
