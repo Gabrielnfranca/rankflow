@@ -20,14 +20,45 @@ export interface Profile {
 
 // Helper functions
 export async function getCurrentUser() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single();
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
 
-  return profile;
+    if (error) {
+      console.error('Erro ao buscar perfil:', error);
+      // Se o perfil não existir, criar um novo
+      if (error.code === 'PGRST116') {
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: user.id,
+              email: user.email,
+              name: user.user_metadata?.name || user.email?.split('@')[0]
+            }
+          ])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Erro ao criar perfil:', createError);
+          return null;
+        }
+
+        return newProfile;
+      }
+      return null;
+    }
+
+    return profile;
+  } catch (error) {
+    console.error('Erro ao buscar usuário:', error);
+    return null;
+  }
 }
