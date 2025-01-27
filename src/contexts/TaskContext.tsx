@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface Task {
   id: number;
@@ -14,6 +15,7 @@ interface Task {
   color?: string;
   time?: string;
   completedAt?: string;
+  userId: string; 
 }
 
 interface TaskContextType {
@@ -25,91 +27,89 @@ interface TaskContextType {
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
-const INITIAL_TASKS: Task[] = [
-  {
-    id: 1,
-    title: 'Análise Técnica - Cliente A',
-    client: 'Cliente A',
-    deadline: '2024-03-20',
-    priority: 'Alta',
-    status: 'pendente',
-    type: 'SEO Técnico',
-    order: 0
-  },
-  {
-    id: 2,
-    title: 'Pesquisa de Palavras-chave - Cliente B',
-    client: 'Cliente B',
-    deadline: '2024-03-25',
-    priority: 'Média',
-    status: 'em_progresso',
-    type: 'Keyword Research',
-    order: 0
-  },
-  {
-    id: 3,
-    title: 'Prospecção de Backlinks - Cliente C',
-    client: 'Cliente C',
-    deadline: '2024-03-18',
-    priority: 'Baixa',
-    status: 'concluida',
-    type: 'Backlinks',
-    order: 0
-  },
-];
-
 export function TaskProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem('tasks');
-    return saved ? JSON.parse(saved) : INITIAL_TASKS;
-  });
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [tasks]);
+    const loadTasks = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-  const addTask = (task: Task) => {
-    setTasks(prev => [...prev, task]);
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('userId', user.id)
+        .order('order');
+
+      if (error) {
+        console.error('Erro ao carregar tarefas:', error);
+        return;
+      }
+
+      setTasks(data || []);
+    };
+
+    loadTasks();
+  }, []);
+
+  const addTask = async (task: Task) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([{ ...task, userId: user.id }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao adicionar tarefa:', error);
+      return;
+    }
+
+    setTasks(prev => [...prev, data]);
   };
 
-  const updateTask = (id: number, updates: Partial<Task>) => {
+  const updateTask = async (id: number, updates: Partial<Task>) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', id)
+      .eq('userId', user.id); 
+
+    if (error) {
+      console.error('Erro ao atualizar tarefa:', error);
+      return;
+    }
+
     setTasks(prev =>
-      prev.map(task => {
-        if (task.id === id) {
-          if (updates.status === 'concluida') {
-            return {
-              ...task,
-              ...updates,
-              completedAt: new Date().toISOString()
-            };
-          }
-          return { ...task, ...updates, completedAt: undefined };
-        }
-        return task;
-      })
+      prev.map(task => (task.id === id ? { ...task, ...updates } : task))
     );
   };
 
-  const deleteTask = (id: number) => {
-    setTasks(prev => {
-      const taskToDelete = prev.find(t => t.id === id);
-      if (!taskToDelete) return prev;
-      
-      const filteredTasks = prev.filter(task => task.id !== id);
-      // Reorder remaining tasks in the same status
-      return filteredTasks.map((task, index) => {
-        if (task.status === taskToDelete.status) {
-          return { ...task, order: index };
-        }
-        return task;
-      });
-    });
+  const deleteTask = async (id: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id)
+      .eq('userId', user.id); 
+
+    if (error) {
+      console.error('Erro ao deletar tarefa:', error);
+      return;
+    }
+
+    setTasks(prev => prev.filter(task => task.id !== id));
   };
 
   return (
-    <TaskContext.Provider 
-      value={{ tasks, addTask, updateTask, deleteTask }}
-    >
+    <TaskContext.Provider value={{ tasks, addTask, updateTask, deleteTask }}>
       {children}
     </TaskContext.Provider>
   );
@@ -117,7 +117,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
 export function useTasks() {
   const context = useContext(TaskContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useTasks must be used within a TaskProvider');
   }
   return context;

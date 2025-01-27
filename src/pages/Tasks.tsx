@@ -34,40 +34,9 @@ interface Task {
   color?: string;
   time?: string;
   completedAt?: string;
+  user_id: string;
+  created_at?: string;
 }
-
-const INITIAL_TASKS: Task[] = [
-  {
-    id: 1,
-    title: 'Análise Técnica - Cliente A',
-    client: 'Cliente A',
-    deadline: '2024-03-20',
-    priority: 'Alta',
-    status: 'pendente',
-    type: 'SEO Técnico',
-    order: 0
-  },
-  {
-    id: 2,
-    title: 'Pesquisa de Palavras-chave - Cliente B',
-    client: 'Cliente B',
-    deadline: '2024-03-25',
-    priority: 'Média',
-    status: 'em_progresso',
-    type: 'Keyword Research',
-    order: 0
-  },
-  {
-    id: 3,
-    title: 'Prospecção de Backlinks - Cliente C',
-    client: 'Cliente C',
-    deadline: '2024-03-18',
-    priority: 'Baixa',
-    status: 'concluida',
-    type: 'Backlinks',
-    order: 0
-  },
-];
 
 const columns = [
   { 
