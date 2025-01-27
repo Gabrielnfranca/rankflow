@@ -33,8 +33,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadTasks = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('Usuário não autenticado');
+        return;
+      }
 
+      console.log('Carregando tarefas para usuário:', user.id);
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -46,16 +50,45 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      console.log('Tarefas carregadas:', data);
       setTasks(data || []);
     };
 
+    // Carregar tarefas iniciais
     loadTasks();
+
+    // Configurar realtime subscription
+    const channel = supabase
+      .channel('tasks_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        async (payload) => {
+          console.log('Mudança detectada:', payload);
+          // Recarregar todas as tarefas quando houver mudança
+          loadTasks();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription
+    return () => {
+      channel.unsubscribe();
+    };
   }, []);
 
   const addTask = async (task: Task) => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.log('Usuário não autenticado ao adicionar tarefa');
+      return;
+    }
 
+    console.log('Adicionando tarefa:', { ...task, userId: user.id });
     const { data, error } = await supabase
       .from('tasks')
       .insert([{ ...task, userId: user.id }])
@@ -67,6 +100,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    console.log('Tarefa adicionada com sucesso:', data);
     if (data) {
       setTasks(prev => [...prev, data]);
     }
@@ -74,8 +108,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const updateTask = async (id: number, updates: Partial<Task>) => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.log('Usuário não autenticado ao atualizar tarefa');
+      return;
+    }
 
+    console.log('Atualizando tarefa:', id, updates);
     const { error } = await supabase
       .from('tasks')
       .update(updates)
@@ -87,6 +125,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    console.log('Tarefa atualizada com sucesso:', id);
     setTasks(prev =>
       prev.map(task => (task.id === id ? { ...task, ...updates } : task))
     );
@@ -94,8 +133,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = async (id: number) => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.log('Usuário não autenticado ao deletar tarefa');
+      return;
+    }
 
+    console.log('Deletando tarefa:', id);
     const { error } = await supabase
       .from('tasks')
       .delete()
@@ -107,6 +150,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    console.log('Tarefa deletada com sucesso:', id);
     setTasks(prev => prev.filter(task => task.id !== id));
   };
 
