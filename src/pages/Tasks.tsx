@@ -34,7 +34,7 @@ interface Task {
   color?: string;
   time?: string;
   completedAt?: string;
-  user_id: string;
+  userId: string;
   created_at?: string;
 }
 
@@ -79,12 +79,12 @@ export function Tasks() {
   const [isCreating, setIsCreating] = React.useState(false);
 
   const handleNewTask = (taskData: Omit<Task, 'id' | 'status' | 'order'>) => {
-    const newTask: Task = {
-      id: Math.max(0, ...tasks.map(t => t.id)) + 1,
+    const newTask = {
       status: 'pendente',
       order: tasks.filter(t => t.status === 'pendente').length,
       ...taskData,
-      labels: taskData.labels || []
+      labels: taskData.labels || [],
+      userId: '' // será preenchido pelo contexto
     };
     
     addTask(newTask);

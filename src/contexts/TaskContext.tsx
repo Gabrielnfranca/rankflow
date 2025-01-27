@@ -67,7 +67,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setTasks(prev => [...prev, data]);
+    if (data) {
+      setTasks(prev => [...prev, data]);
+    }
   };
 
   const updateTask = async (id: number, updates: Partial<Task>) => {
