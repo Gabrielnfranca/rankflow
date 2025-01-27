@@ -7,7 +7,29 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    storageKey: 'rankflow-auth',
+    storage: localStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
+
+// Função para verificar e atualizar o token se necessário
+export async function refreshSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
+    if (error) {
+      console.error('Erro ao atualizar sessão:', error);
+      return null;
+    }
+    return refreshedSession;
+  }
+  return null;
+}
 
 // Tipos para as tabelas do Supabase
 export interface Profile {
@@ -21,20 +43,14 @@ export interface Profile {
 // Helper functions
 export async function getCurrentUser(): Promise<Profile | null> {
   try {
-    // Primeiro verifica se há uma sessão válida
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.error('Erro ao verificar sessão:', sessionError);
-      return null;
-    }
-
+    // Tenta atualizar a sessão primeiro
+    const session = await refreshSession();
     if (!session) {
-      console.log('Nenhuma sessão encontrada');
+      console.log('Nenhuma sessão válida encontrada');
       return null;
     }
 
-    // Depois verifica o usuário atual
+    // Busca o usuário atual
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError) {
@@ -47,7 +63,7 @@ export async function getCurrentUser(): Promise<Profile | null> {
       return null;
     }
 
-    // Por fim, busca o perfil do usuário
+    // Busca o perfil do usuário
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*')

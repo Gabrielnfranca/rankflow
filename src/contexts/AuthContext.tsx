@@ -21,52 +21,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    async function checkUser() {
+    async function initializeAuth() {
       try {
-        // Primeiro, verifica a sessão
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error('Erro ao verificar sessão:', sessionError);
-          throw sessionError;
-        }
-
-        if (!session) {
-          // Se não há sessão, limpa o estado e finaliza
-          if (mounted) {
-            setUser(null);
-            setLoading(false);
-          }
-          return;
-        }
-
-        // Se há sessão, busca o usuário atual
         const currentUser = await getCurrentUser();
         if (mounted) {
           setUser(currentUser);
           setError(null);
-          setLoading(false);
         }
       } catch (error) {
-        console.error('Error checking user:', error);
+        console.error('Error initializing auth:', error);
         if (mounted) {
-          setError('Erro ao verificar usuário');
-          // Em caso de erro, tenta limpar a sessão
-          await supabase.auth.signOut();
-          setUser(null);
+          setError('Erro ao inicializar autenticação');
+        }
+      } finally {
+        if (mounted) {
           setLoading(false);
         }
       }
     }
 
-    // Verifica o usuário inicial
-    checkUser();
+    // Inicializa a autenticação
+    initializeAuth();
 
     // Configura o listener de mudança de estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session);
       
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (mounted) {
+          setLoading(true);
+        }
         const currentUser = await getCurrentUser();
         if (mounted) {
           setUser(currentUser);
@@ -79,9 +63,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setError(null);
           setLoading(false);
         }
-      } else if (event === 'TOKEN_REFRESHED') {
-        // Recarrega o usuário quando o token é atualizado
-        checkUser();
       }
     });
 
@@ -97,9 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      // Primeiro, tenta fazer logout para limpar qualquer sessão existente
-      await supabase.auth.signOut();
-
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -108,8 +86,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       
       const currentUser = await getCurrentUser();
+      if (!currentUser) {
+        throw new Error('Erro ao obter dados do usuário');
+      }
+      
       setUser(currentUser);
-      setLoading(false);
     } catch (error: any) {
       console.error('Error logging in:', error);
       if (error.message.includes('Invalid login credentials')) {
@@ -117,8 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setError(error.message);
       }
-      setLoading(false);
       throw error;
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -127,22 +109,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       
-      // Limpa o cache do Supabase
-      localStorage.removeItem('supabase.auth.token');
-      
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
       setUser(null);
-      setLoading(false);
+      
+      // Limpa o cache do Supabase
+      localStorage.removeItem('rankflow-auth');
       
       // Força um reload da página após o logout
       window.location.href = '/login';
     } catch (error: any) {
       console.error('Error logging out:', error);
       setError(error.message);
-      setLoading(false);
       throw error;
+    } finally {
+      setLoading(false);
     }
   }
 
