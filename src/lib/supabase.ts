@@ -7,13 +7,29 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
+// Cria um storage customizado que limpa tudo ao fechar a página
+const customStorage: Storage = {
+  length: 0,
+  clear: () => {
+    sessionStorage.clear();
+    localStorage.clear();
+  },
+  getItem: (key: string) => sessionStorage.getItem(key),
+  key: (index: number) => sessionStorage.key(index),
+  removeItem: (key: string) => {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  },
+  setItem: (key: string, value: string) => sessionStorage.setItem(key, value)
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    storageKey: 'rankflow-auth',
-    storage: localStorage,
+    storage: customStorage,
+    storageKey: 'rankflow-auth-session',
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: false
   }
 });
 
@@ -41,25 +57,32 @@ export interface Profile {
 }
 
 // Helper functions
+export async function clearAllStorage() {
+  try {
+    customStorage.clear();
+    await supabase.auth.signOut();
+  } catch (error) {
+    console.error('Error clearing storage:', error);
+  }
+}
+
 export async function getCurrentUser(): Promise<Profile | null> {
   try {
-    // Tenta atualizar a sessão primeiro
-    const session = await refreshSession();
-    if (!session) {
-      console.log('Nenhuma sessão válida encontrada');
-      return null;
-    }
-
-    // Busca o usuário atual
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Verifica a sessão atual
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (userError) {
-      console.error('Erro ao buscar usuário:', userError);
+    if (!session?.access_token) {
+      console.log('No valid session found');
+      await clearAllStorage();
       return null;
     }
 
-    if (!user) {
-      console.log('Nenhum usuário encontrado');
+    // Verifica se o token ainda é válido
+    const { data: { user }, error: userError } = await supabase.auth.getUser(session.access_token);
+    
+    if (userError || !user) {
+      console.error('Error getting user or no user found:', userError);
+      await clearAllStorage();
       return null;
     }
 
@@ -71,10 +94,8 @@ export async function getCurrentUser(): Promise<Profile | null> {
       .single();
 
     if (profileError) {
-      console.error('Erro ao buscar perfil:', profileError);
-      // Se o perfil não existir, tenta criar um novo
+      console.error('Error fetching profile:', profileError);
       if (profileError.code === 'PGRST116') {
-        console.log('Criando novo perfil para o usuário:', user.id);
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert([
@@ -88,18 +109,21 @@ export async function getCurrentUser(): Promise<Profile | null> {
           .single();
 
         if (createError) {
-          console.error('Erro ao criar perfil:', createError);
+          console.error('Error creating profile:', createError);
+          await clearAllStorage();
           return null;
         }
 
         return newProfile;
       }
+      await clearAllStorage();
       return null;
     }
 
     return profile;
   } catch (error) {
-    console.error('Erro inesperado ao buscar usuário:', error);
+    console.error('Unexpected error in getCurrentUser:', error);
+    await clearAllStorage();
     return null;
   }
 }

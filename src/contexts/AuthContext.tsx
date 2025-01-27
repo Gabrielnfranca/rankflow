@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, Profile, getCurrentUser } from '../lib/supabase';
+import { supabase, getCurrentUser, clearAllStorage, Profile } from '../lib/supabase';
 
 interface AuthContextType {
   user: Profile | null;
@@ -23,12 +23,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchCurrentUser = async () => {
     try {
       const currentUser = await getCurrentUser();
+      if (!currentUser) {
+        await clearAllStorage();
+      }
       setUser(currentUser);
       setError(null);
     } catch (error) {
       console.error('Error fetching user:', error);
       setError('Erro ao buscar usuário');
       setUser(null);
+      await clearAllStorage();
     } finally {
       setLoading(false);
     }
@@ -40,16 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initialize = async () => {
       try {
-        // Verifica se já tem uma sessão
-        const { data: { session } } = await supabase.auth.getSession();
-        
+        await fetchCurrentUser();
         if (mounted) {
-          if (session) {
-            await fetchCurrentUser();
-          } else {
-            setUser(null);
-            setLoading(false);
-          }
           setInitialized(true);
         }
       } catch (error) {
@@ -57,6 +53,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setError('Erro na inicialização');
           setUser(null);
+          await clearAllStorage();
+        }
+      } finally {
+        if (mounted) {
           setLoading(false);
           setInitialized(true);
         }
@@ -83,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           case 'SIGNED_OUT':
             setUser(null);
             setError(null);
+            await clearAllStorage();
             setLoading(false);
             break;
           case 'TOKEN_REFRESHED':
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Error in auth state change:', error);
         setError('Erro na mudança de estado');
         setUser(null);
+        await clearAllStorage();
         setLoading(false);
       }
     });
@@ -122,6 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error logging in:', error);
       setError(error.message);
       setLoading(false);
+      await clearAllStorage();
       throw error;
     }
   }
@@ -131,15 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
+      await clearAllStorage();
       setUser(null);
-      localStorage.removeItem('rankflow-auth');
-      
-      // Limpa qualquer estado persistido
-      window.sessionStorage.clear();
-      window.localStorage.clear();
       
       // Força um reload completo da aplicação
       window.location.href = '/login';
@@ -194,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError(error.message);
       }
       setLoading(false);
+      await clearAllStorage();
       throw error;
     }
   }
@@ -209,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error resetting password:', error);
       setError(error.message);
       setLoading(false);
+      await clearAllStorage();
       throw error;
     }
   }
