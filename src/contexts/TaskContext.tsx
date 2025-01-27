@@ -34,7 +34,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     const loadTasks = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log('Usuário não autenticado');
+        console.error('Erro: Você precisa estar logado para visualizar tarefas');
+        alert('Você precisa estar logado para visualizar tarefas');
         return;
       }
 
@@ -47,6 +48,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Erro ao carregar tarefas:', error);
+        alert('Erro ao carregar tarefas: ' + error.message);
         return;
       }
 
@@ -84,7 +86,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const addTask = async (task: Task) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.log('Usuário não autenticado ao adicionar tarefa');
+      console.error('Erro: Você precisa estar logado para criar tarefas');
+      alert('Você precisa estar logado para criar tarefas');
       return;
     }
 
@@ -97,6 +100,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.error('Erro ao adicionar tarefa:', error);
+      alert('Erro ao adicionar tarefa: ' + error.message);
       return;
     }
 
@@ -109,7 +113,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const updateTask = async (id: number, updates: Partial<Task>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.log('Usuário não autenticado ao atualizar tarefa');
+      console.error('Erro: Você precisa estar logado para atualizar tarefas');
+      alert('Você precisa estar logado para atualizar tarefas');
       return;
     }
 
@@ -122,6 +127,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.error('Erro ao atualizar tarefa:', error);
+      alert('Erro ao atualizar tarefa: ' + error.message);
       return;
     }
 
@@ -134,7 +140,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const deleteTask = async (id: number) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.log('Usuário não autenticado ao deletar tarefa');
+      console.error('Erro: Você precisa estar logado para deletar tarefas');
+      alert('Você precisa estar logado para deletar tarefas');
       return;
     }
 
@@ -147,6 +154,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.error('Erro ao deletar tarefa:', error);
+      alert('Erro ao deletar tarefa: ' + error.message);
       return;
     }
 
