@@ -20,8 +20,9 @@ import { BacklinkProvider } from './contexts/BacklinkContext';
 import { ClientProvider } from './contexts/ClientContext';
 import { MyBacklinksProvider } from './contexts/MyBacklinksContext';
 import { KeywordProvider } from './contexts/KeywordContext';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import supabase from './supabase';
+import { useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { supabase } from './lib/supabase';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -58,6 +59,7 @@ function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
+        <AuthProvider>
         <Routes>
           {/* Rotas Públicas */}
           <Route path="/login" element={<Login />} />
@@ -98,6 +100,7 @@ function App() {
             }
           />
         </Routes>
+        </AuthProvider>
       </ToastProvider>
     </BrowserRouter>
   );
