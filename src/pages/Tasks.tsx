@@ -230,7 +230,14 @@ export function Tasks() {
         <NewTaskModal
           isOpen={isCreating}
           onClose={() => setIsCreating(false)}
-          onSubmit={handleNewTask}
+          onSubmit={async (data) => {
+            try {
+              await handleNewTask(data);
+              setIsCreating(false);
+            } catch (error) {
+              console.error('Erro ao criar tarefa:', error);
+            }
+          }}
         />
       )}
 
