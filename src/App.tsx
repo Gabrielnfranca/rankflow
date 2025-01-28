@@ -57,52 +57,48 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <BrowserRouter>
-      <ThemeProvider>
-        <AuthProvider>
-          <ToastProvider>
-            <Routes>
-              {/* Rotas Públicas */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
+      <ToastProvider>
+        <Routes>
+          {/* Rotas Públicas */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-              {/* Rotas Privadas */}
-              <Route
-                path="/*"
-                element={
-                  <PrivateRoute>
-                    <ClientProvider>
-                      <TaskProvider>
-                        <BacklinkProvider>
-                          <MyBacklinksProvider>
-                            <FeedProvider>
-                              <KeywordProvider>
-                                <Layout>
-                                  <Routes>
-                                    <Route path="/" element={<Dashboard />} />
-                                    <Route path="/clients" element={<Clients />} />
-                                    <Route path="/client/:id" element={<ClientDashboard />} />
-                                    <Route path="/tasks" element={<Tasks />} />
-                                    <Route path="/reports" element={<Reports />} />
-                                    <Route path="/settings" element={<Settings />} />
-                                    <Route path="/backlinks" element={<Backlinks />} />
-                                    <Route path="/my-backlinks" element={<MyBacklinks />} />
-                                    <Route path="*" element={<Navigate to="/" replace />} />
-                                  </Routes>
-                                </Layout>
-                              </KeywordProvider>
-                            </FeedProvider>
-                          </MyBacklinksProvider>
-                        </BacklinkProvider>
-                      </TaskProvider>
-                    </ClientProvider>
-                  </PrivateRoute>
-                }
-              />
-            </Routes>
-          </ToastProvider>
-        </AuthProvider>
-      </ThemeProvider>
+          {/* Rotas Privadas */}
+          <Route
+            path="/*"
+            element={
+              <PrivateRoute>
+                <ClientProvider>
+                  <TaskProvider>
+                    <BacklinkProvider>
+                      <MyBacklinksProvider>
+                        <FeedProvider>
+                          <KeywordProvider>
+                            <Layout>
+                              <Routes>
+                                <Route path="/" element={<Dashboard />} />
+                                <Route path="/clients" element={<Clients />} />
+                                <Route path="/client/:id" element={<ClientDashboard />} />
+                                <Route path="/tasks" element={<Tasks />} />
+                                <Route path="/reports" element={<Reports />} />
+                                <Route path="/settings" element={<Settings />} />
+                                <Route path="/backlinks" element={<Backlinks />} />
+                                <Route path="/my-backlinks" element={<MyBacklinks />} />
+                                <Route path="*" element={<Navigate to="/" replace />} />
+                              </Routes>
+                            </Layout>
+                          </KeywordProvider>
+                        </FeedProvider>
+                      </MyBacklinksProvider>
+                    </BacklinkProvider>
+                  </TaskProvider>
+                </ClientProvider>
+              </PrivateRoute>
+            }
+          />
+        </Routes>
+      </ToastProvider>
     </BrowserRouter>
   );
 }
