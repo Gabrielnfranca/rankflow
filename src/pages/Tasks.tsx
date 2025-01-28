@@ -78,26 +78,38 @@ export function Tasks() {
   const { tasks, addTask, deleteTask, updateTask } = useTasks();
   const [isCreating, setIsCreating] = React.useState(false);
 
-  const handleNewTask = (taskData: Omit<Task, 'id' | 'status' | 'order'>) => {
-    const newTask = {
-      status: 'pendente',
-      order: tasks.filter(t => t.status === 'pendente').length,
-      ...taskData,
-      labels: taskData.labels || [],
-      user_id: '' // será preenchido pelo contexto
-    };
-    
-    addTask(newTask);
-    
-    addFeedItem({
-      type: 'task_pending',
-      taskTitle: newTask.title,
-      clientId: 1,
-      clientName: newTask.client,
-      status: 'pendente'
-    });
+  const handleNewTask = async (taskData: Omit<Task, 'id' | 'status' | 'order'>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showToast('error', 'Você precisa estar logado para criar tarefas');
+        return;
+      }
 
-    showToast('success', 'Tarefa criada com sucesso!');
+      const pendingTasks = tasks.filter(t => t.status === 'pendente');
+      const newTask = {
+        status: 'pendente',
+        order: pendingTasks.length,
+        ...taskData,
+        labels: taskData.labels || [],
+        user_id: user.id
+      };
+      
+      await addTask(newTask);
+      
+      addFeedItem({
+        type: 'task_pending',
+        taskTitle: newTask.title,
+        clientId: 1,
+        clientName: newTask.client,
+        status: 'pendente'
+      });
+
+      showToast('success', 'Tarefa criada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao criar tarefa:', error);
+      showToast('error', 'Erro ao criar tarefa');
+    }
   };
 
   const handleDeleteTask = (taskId: number) => {
@@ -130,32 +142,63 @@ export function Tasks() {
     }
   };
 
-  const handleDragEnd = (result: DropResult) => {
+  const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
 
     const taskId = parseInt(result.draggableId);
     const newStatus = result.destination.droppableId as 'pendente' | 'em_progresso' | 'concluida';
+    const oldStatus = result.source.droppableId;
     
     const taskToMove = tasks.find(t => t.id === taskId);
     if (!taskToMove) return;
 
-    const statusMap = {
-      pendente: 'Tarefa movida para Pendentes',
-      em_progresso: 'Tarefa movida para Em Progresso',
-      concluida: 'Tarefa movida para Concluídas'
-    };
+    try {
+      // Atualiza o status da tarefa movida
+      await updateTask(taskId, { 
+        status: newStatus,
+        order: result.destination.index
+      });
 
-    updateTask(taskId, { status: newStatus });
+      // Atualiza a ordem das outras tarefas na coluna de destino
+      const tasksInDestination = tasks.filter(t => t.status === newStatus && t.id !== taskId);
+      for (let i = 0; i < tasksInDestination.length; i++) {
+        const task = tasksInDestination[i];
+        const newOrder = i >= result.destination.index ? i + 1 : i;
+        if (task.order !== newOrder) {
+          await updateTask(task.id, { order: newOrder });
+        }
+      }
 
-    showToast('success', statusMap[newStatus]);
-    
-    addFeedItem({
-      type: 'task_moved',
-      taskTitle: taskToMove.title,
-      clientId: 1,
-      clientName: taskToMove.client,
-      status: newStatus
-    });
+      // Atualiza a ordem das tarefas na coluna de origem se necessário
+      if (oldStatus !== newStatus) {
+        const tasksInSource = tasks.filter(t => t.status === oldStatus && t.id !== taskId);
+        for (let i = 0; i < tasksInSource.length; i++) {
+          const task = tasksInSource[i];
+          if (task.order !== i) {
+            await updateTask(task.id, { order: i });
+          }
+        }
+      }
+
+      const statusMap = {
+        pendente: 'Tarefa movida para Pendentes',
+        em_progresso: 'Tarefa movida para Em Progresso',
+        concluida: 'Tarefa movida para Concluídas'
+      };
+
+      showToast('success', statusMap[newStatus]);
+      
+      addFeedItem({
+        type: 'task_moved',
+        taskTitle: taskToMove.title,
+        clientId: 1,
+        clientName: taskToMove.client,
+        status: newStatus
+      });
+    } catch (error) {
+      console.error('Erro ao mover tarefa:', error);
+      showToast('error', 'Erro ao mover tarefa');
+    }
   };
 
   const getColumnTasks = (status: Task['status']) => {
@@ -187,16 +230,7 @@ export function Tasks() {
         <NewTaskModal
           isOpen={isCreating}
           onClose={() => setIsCreating(false)}
-          onSubmit={(data) => {
-            const newTask = {
-              ...data,
-              id: Math.floor(Math.random() * 1000000),
-              status: 'pendente' as const,
-              order: tasks.length
-            };
-            addTask(newTask);
-            setIsCreating(false);
-          }}
+          onSubmit={handleNewTask}
         />
       )}
 

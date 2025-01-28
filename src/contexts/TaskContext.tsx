@@ -84,82 +84,104 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addTask = async (task: Task) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('Erro: Você precisa estar logado para criar tarefas');
-      alert('Você precisa estar logado para criar tarefas');
-      return;
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Você precisa estar logado para criar tarefas');
+      }
 
-    console.log('Adicionando tarefa:', { ...task, user_id: user.id });
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert([{ ...task, user_id: user.id }])
-      .select()
-      .single();
+      // Garante que a ordem está correta
+      const { data: existingTasks } = await supabase
+        .from('tasks')
+        .select('order')
+        .eq('status', task.status)
+        .eq('user_id', user.id)
+        .order('order', { ascending: true });
 
-    if (error) {
+      const order = existingTasks?.length || 0;
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([{ ...task, user_id: user.id, order }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setTasks(prev => [...prev, data].sort((a, b) => (a.order || 0) - (b.order || 0)));
+      }
+
+      return data;
+    } catch (error) {
       console.error('Erro ao adicionar tarefa:', error);
-      alert('Erro ao adicionar tarefa: ' + error.message);
-      return;
-    }
-
-    console.log('Tarefa adicionada com sucesso:', data);
-    if (data) {
-      setTasks(prev => [...prev, data]);
+      throw error;
     }
   };
 
   const updateTask = async (id: number, updates: Partial<Task>) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('Erro: Você precisa estar logado para atualizar tarefas');
-      alert('Você precisa estar logado para atualizar tarefas');
-      return;
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Você precisa estar logado para atualizar tarefas');
+      }
 
-    console.log('Atualizando tarefa:', id, updates);
-    const { error } = await supabase
-      .from('tasks')
-      .update(updates)
-      .eq('id', id)
-      .eq('user_id', user.id);
+      const { error } = await supabase
+        .from('tasks')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', user.id);
 
-    if (error) {
+      if (error) throw error;
+
+      setTasks(prev =>
+        prev.map(task => (task.id === id ? { ...task, ...updates } : task))
+           .sort((a, b) => (a.order || 0) - (b.order || 0))
+      );
+    } catch (error) {
       console.error('Erro ao atualizar tarefa:', error);
-      alert('Erro ao atualizar tarefa: ' + error.message);
-      return;
+      throw error;
     }
-
-    console.log('Tarefa atualizada com sucesso:', id);
-    setTasks(prev =>
-      prev.map(task => (task.id === id ? { ...task, ...updates } : task))
-    );
   };
 
   const deleteTask = async (id: number) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('Erro: Você precisa estar logado para deletar tarefas');
-      alert('Você precisa estar logado para deletar tarefas');
-      return;
-    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Você precisa estar logado para deletar tarefas');
+      }
 
-    console.log('Deletando tarefa:', id);
-    const { error } = await supabase
-      .from('tasks')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
+      const taskToDelete = tasks.find(t => t.id === id);
+      if (!taskToDelete) throw new Error('Tarefa não encontrada');
 
-    if (error) {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Atualiza a ordem das tarefas restantes
+      const tasksInSameStatus = tasks.filter(t => 
+        t.status === taskToDelete.status && t.id !== id
+      );
+
+      for (let i = 0; i < tasksInSameStatus.length; i++) {
+        const task = tasksInSameStatus[i];
+        if (task.order !== i) {
+          await updateTask(task.id, { order: i });
+        }
+      }
+
+      setTasks(prev => 
+        prev.filter(task => task.id !== id)
+           .sort((a, b) => (a.order || 0) - (b.order || 0))
+      );
+    } catch (error) {
       console.error('Erro ao deletar tarefa:', error);
-      alert('Erro ao deletar tarefa: ' + error.message);
-      return;
+      throw error;
     }
-
-    console.log('Tarefa deletada com sucesso:', id);
-    setTasks(prev => prev.filter(task => task.id !== id));
   };
 
   return (
