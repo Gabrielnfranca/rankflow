@@ -17,102 +17,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
 
-  // Função para buscar usuário atual
   const fetchCurrentUser = async () => {
     try {
-      const currentUser = await getCurrentUser();
-      if (!currentUser) {
-        await clearAllStorage();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        setUser(null);
+        return;
       }
-      setUser(currentUser);
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      setUser(profile);
       setError(null);
     } catch (error) {
       console.error('Error fetching user:', error);
-      setError('Erro ao buscar usuário');
       setUser(null);
-      await clearAllStorage();
-    } finally {
-      setLoading(false);
+      setError('Erro ao buscar usuário');
     }
   };
 
-  // Efeito para inicialização
   useEffect(() => {
-    let mounted = true;
+    fetchCurrentUser().finally(() => setLoading(false));
 
-    const initialize = async () => {
-      try {
-        // Primeiro, tenta recuperar a sessão
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          throw sessionError;
-        }
-
-        if (session?.access_token) {
-          // Verifica se o token ainda é válido
-          const { data: { user }, error: userError } = await supabase.auth.getUser(session.access_token);
-          
-          if (userError || !user) {
-            throw new Error('Invalid session');
-          }
-
-          await fetchCurrentUser();
-        } else {
-          setUser(null);
-          await clearAllStorage();
-        }
-      } catch (error) {
-        console.error('Error in initialization:', error);
-        setError('Erro na inicialização');
-        setUser(null);
-        await clearAllStorage();
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initialize();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session);
 
-      try {
-        switch (event) {
-          case 'SIGNED_IN':
-            if (session?.access_token) {
-              await fetchCurrentUser();
-            }
-            break;
-          case 'SIGNED_OUT':
-            setUser(null);
-            setError(null);
-            await clearAllStorage();
-            break;
-          case 'TOKEN_REFRESHED':
-            if (session?.access_token) {
-              await fetchCurrentUser();
-            }
-            break;
-        }
-      } catch (error) {
-        console.error('Error in auth state change:', error);
-        setError('Erro na mudança de estado');
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await fetchCurrentUser();
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
-        await clearAllStorage();
+        setError(null);
       }
     });
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -120,37 +68,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(email: string, password: string) {
     try {
       setLoading(true);
-      setError(null);
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      
       if (error) throw error;
-
+      
       await fetchCurrentUser();
     } catch (error: any) {
       console.error('Error logging in:', error);
       setError(error.message);
-      setLoading(false);
-      await clearAllStorage();
       throw error;
+    } finally {
+      setLoading(false);
     }
   }
 
   async function logout() {
-    setLoading(true);
     try {
-      await clearAllStorage();
+      setLoading(true);
+      await supabase.auth.signOut();
       setUser(null);
       setError(null);
-      window.location.href = '/login'; // Força um refresh completo da página
-    } catch (error) {
-      console.error('Error during logout:', error);
-      setError('Erro ao fazer logout');
-    } finally {
-      setLoading(false);
+      
+      // Limpa todos os storages
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Força um refresh da página
+      window.location.href = '/login';
+    } catch (error: any) {
+      console.error('Error logging out:', error);
+      setError(error.message);
     }
   }
 
@@ -218,26 +165,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Só renderiza o conteúdo após a inicialização
-  if (!initialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  const value = {
-    user,
-    login,
-    logout,
-    register,
-    resetPassword,
-    loading,
-    error
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        error,
+        login,
+        logout,
+        register,
+        resetPassword,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

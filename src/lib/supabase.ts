@@ -21,28 +21,27 @@ const customStorage: Storage = {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    autoRefreshToken: true,
     persistSession: true,
     storage: localStorage,
-    storageKey: 'supabase.auth.token',
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
-  },
-  persistSession: true
+    detectSessionInUrl: false
+  }
 });
 
 // Função para verificar e atualizar o token se necessário
 export async function refreshSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
-    if (error) {
-      console.error('Erro ao atualizar sessão:', error);
-      return null;
-    }
-    return refreshedSession;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    
+    return session;
+  } catch (error) {
+    console.error('Error refreshing session:', error);
+    return null;
   }
-  return null;
 }
 
 // Tipos para as tabelas do Supabase

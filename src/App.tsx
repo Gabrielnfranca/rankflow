@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Clients } from './pages/Clients';
@@ -21,19 +21,29 @@ import { ClientProvider } from './contexts/ClientContext';
 import { MyBacklinksProvider } from './contexts/MyBacklinksContext';
 import { KeywordProvider } from './contexts/KeywordContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import supabase from './supabase';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate('/login', { replace: true });
-    }
-  }, [loading, user, navigate]);
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session && !loading) {
+        // Redireciona mantendo a URL original como state
+        navigate('/login', { 
+          replace: true,
+          state: { from: location.pathname }
+        });
+      }
+    };
 
-  // Mostra loading apenas se estiver carregando E não tivermos informação do usuário
-  if (loading && !user) {
+    checkAuth();
+  }, [navigate, location, loading]);
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
@@ -41,13 +51,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Se não está carregando e não tem usuário, não renderiza nada (useEffect cuidará do redirecionamento)
-  if (!user) {
-    return null;
-  }
-
-  // Se tem usuário, renderiza o conteúdo
-  return <>{children}</>;
+  return user ? <>{children}</> : null;
 }
 
 function App() {
