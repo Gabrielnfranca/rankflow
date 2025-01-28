@@ -44,21 +44,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initialize = async () => {
       try {
-        await fetchCurrentUser();
-        if (mounted) {
-          setInitialized(true);
+        // Primeiro, tenta recuperar a sessão
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          throw sessionError;
         }
-      } catch (error) {
-        console.error('Error in initialization:', error);
-        if (mounted) {
-          setError('Erro na inicialização');
+
+        if (session?.access_token) {
+          // Verifica se o token ainda é válido
+          const { data: { user }, error: userError } = await supabase.auth.getUser(session.access_token);
+          
+          if (userError || !user) {
+            throw new Error('Invalid session');
+          }
+
+          await fetchCurrentUser();
+        } else {
           setUser(null);
           await clearAllStorage();
         }
+      } catch (error) {
+        console.error('Error in initialization:', error);
+        setError('Erro na inicialização');
+        setUser(null);
+        await clearAllStorage();
       } finally {
         if (mounted) {
           setLoading(false);
-          setInitialized(true);
         }
       }
     };
@@ -68,36 +81,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, { session });
-
       if (!mounted) return;
 
-      setLoading(true);
+      console.log('Auth state changed:', event, session);
 
       try {
         switch (event) {
-          case 'INITIAL_SESSION':
           case 'SIGNED_IN':
-            await fetchCurrentUser();
+            if (session?.access_token) {
+              await fetchCurrentUser();
+            }
             break;
           case 'SIGNED_OUT':
             setUser(null);
             setError(null);
             await clearAllStorage();
-            setLoading(false);
             break;
           case 'TOKEN_REFRESHED':
-            await fetchCurrentUser();
+            if (session?.access_token) {
+              await fetchCurrentUser();
+            }
             break;
-          default:
-            setLoading(false);
         }
       } catch (error) {
         console.error('Error in auth state change:', error);
         setError('Erro na mudança de estado');
         setUser(null);
         await clearAllStorage();
-        setLoading(false);
       }
     });
 
@@ -130,20 +140,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
       await clearAllStorage();
       setUser(null);
-      
-      // Força um reload completo da aplicação
-      window.location.href = '/login';
-    } catch (error: any) {
-      console.error('Error logging out:', error);
-      setError(error.message);
+      setError(null);
+      window.location.href = '/login'; // Força um refresh completo da página
+    } catch (error) {
+      console.error('Error during logout:', error);
+      setError('Erro ao fazer logout');
+    } finally {
       setLoading(false);
-      throw error;
     }
   }
 

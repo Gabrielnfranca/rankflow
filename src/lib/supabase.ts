@@ -7,30 +7,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// Cria um storage customizado que limpa tudo ao fechar a página
+// Cria um storage customizado que usa apenas localStorage
 const customStorage: Storage = {
-  length: 0,
+  length: localStorage.length,
   clear: () => {
-    sessionStorage.clear();
     localStorage.clear();
   },
-  getItem: (key: string) => sessionStorage.getItem(key),
-  key: (index: number) => sessionStorage.key(index),
-  removeItem: (key: string) => {
-    sessionStorage.removeItem(key);
-    localStorage.removeItem(key);
-  },
-  setItem: (key: string, value: string) => sessionStorage.setItem(key, value)
+  getItem: (key: string) => localStorage.getItem(key),
+  key: (index: number) => localStorage.key(index),
+  removeItem: (key: string) => localStorage.removeItem(key),
+  setItem: (key: string, value: string) => localStorage.setItem(key, value)
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    storage: customStorage,
-    storageKey: 'rankflow-auth-session',
+    storage: localStorage,
+    storageKey: 'supabase.auth.token',
     autoRefreshToken: true,
-    detectSessionInUrl: false
-  }
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  },
+  persistSession: true
 });
 
 // Função para verificar e atualizar o token se necessário
@@ -59,8 +57,35 @@ export interface Profile {
 // Helper functions
 export async function clearAllStorage() {
   try {
-    customStorage.clear();
-    await supabase.auth.signOut();
+    // Limpa todos os storages
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Remove cookies específicos do Supabase
+    document.cookie.split(';').forEach(cookie => {
+      document.cookie = cookie
+        .replace(/^ +/, '')
+        .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+    });
+
+    // Força o signOut do Supabase
+    await supabase.auth.signOut({ scope: 'local' });
+
+    // Limpa qualquer cache do service worker se existir
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+    }
+
+    // Limpa qualquer cache da aplicação
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+    }
   } catch (error) {
     console.error('Error clearing storage:', error);
   }
