@@ -34,10 +34,11 @@ export function Dashboard() {
   const { clients } = useClients();
   const [selectedClient, setSelectedClient] = React.useState<string>('all');
 
-  // Agrupar tarefas por cliente
+  // Agrupar tarefas por cliente - otimizado
   const clientProgress = React.useMemo(() => {
-    const progress = {};
-    tasks.forEach(task => {
+    if (!tasks.length) return {};
+
+    return tasks.reduce((progress, task) => {
       if (!progress[task.client]) {
         progress[task.client] = {
           total: 0,
@@ -54,7 +55,7 @@ export function Dashboard() {
       }
 
       // Verificar prazo
-      const deadline = new Date(task.deadline + 'T00:00:00');
+      const deadline = new Date(task.deadline);
       const now = new Date();
       const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -65,13 +66,13 @@ export function Dashboard() {
       }
 
       progress[task.client].tasks.push(task);
-    });
-    return progress;
-  }, [tasks]);
+      return progress;
+    }, {} as Record<string, any>);
+  }, [tasks]); // Mantém tasks como dependência mas otimiza o cálculo
 
-  // Agrupar keywords por mês e posição
-  const keywordData = React.useMemo(() => {
-    if (!keywords) return [];
+  // Agrupar keywords por mês e posição - otimizado
+  const keywordStats = React.useMemo(() => {
+    if (!keywords?.length) return [];
 
     const filteredKeywords = selectedClient === 'all' 
       ? keywords 
@@ -96,14 +97,15 @@ export function Dashboard() {
       if (position <= 30) acc[monthYear].top30++;
 
       return acc;
-    }, {});
+    }, {} as Record<string, any>);
 
     return Object.values(monthlyData).sort((a: any, b: any) => {
-      const [monthA, yearA] = a.name.split('/');
-      const [monthB, yearB] = b.name.split('/');
-      return new Date(yearA, monthA - 1).getTime() - new Date(yearB, monthB - 1).getTime();
+      const [aMonth, aYear] = a.name.split('/');
+      const [bMonth, bYear] = b.name.split('/');
+      return new Date(Number(aYear), Number(aMonth) - 1).getTime() - 
+             new Date(Number(bYear), Number(bMonth) - 1).getTime();
     });
-  }, [keywords, selectedClient]);
+  }, [keywords, selectedClient]); // Mantém as dependências necessárias mas otimiza o cálculo
 
   return (
     <div className={`min-h-screen p-6 ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -380,7 +382,7 @@ export function Dashboard() {
         </div>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={keywordData}>
+            <LineChart data={keywordStats}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="name" 

@@ -2,27 +2,51 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const { register, loading, error: authError } = useAuth();
+  const { register, error: authError } = useAuth();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLocalError(null);
+    setIsLoading(true);
+
+    if (!email || !password || !name) {
+      setLocalError('Por favor, preencha todos os campos');
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      await register(email, password, name);
-      // Após registro bem-sucedido, redirecionar para a página inicial
-      navigate('/');
-    } catch (error) {
-      // O erro já está sendo tratado no AuthContext
+      const { user, profile } = await register(email, password, name);
+      console.log('Registro bem-sucedido!', { user, profile });
+      
+      // Aguarda um pequeno delay para garantir que tudo foi processado
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 500);
+    } catch (error: any) {
+      console.error('Erro durante o registro:', error);
+      if (error.message.includes('Email rate limit exceeded')) {
+        setLocalError('Muitas tentativas. Tente novamente mais tarde.');
+      } else if (error.message.includes('already registered')) {
+        setLocalError('Este email já está registrado.');
+      } else {
+        setLocalError(error.message || 'Erro ao criar conta');
+      }
+      setIsLoading(false);
     }
   };
+
+  const errorMessage = localError || authError;
 
   return (
     <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100'}`}>
@@ -45,9 +69,12 @@ export function Register() {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                disabled={isLoading}
                 className={`appearance-none relative block w-full px-3 py-2 border ${
                   theme === 'dark' ? 'border-gray-700 bg-gray-700 text-white' : 'border-gray-300 text-gray-900'
-                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
                 placeholder="Seu nome"
               />
             </div>
@@ -62,9 +89,12 @@ export function Register() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
                 className={`appearance-none relative block w-full px-3 py-2 border ${
                   theme === 'dark' ? 'border-gray-700 bg-gray-700 text-white' : 'border-gray-300 text-gray-900'
-                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
                 placeholder="seu@email.com"
               />
             </div>
@@ -79,19 +109,22 @@ export function Register() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
                 className={`appearance-none relative block w-full px-3 py-2 border ${
                   theme === 'dark' ? 'border-gray-700 bg-gray-700 text-white' : 'border-gray-300 text-gray-900'
-                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}
+                } rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
                 placeholder="••••••••"
               />
             </div>
           </div>
 
-          {authError && (
+          {errorMessage && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="flex">
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">{authError}</h3>
+                  <h3 className="text-sm font-medium text-red-800">{errorMessage}</h3>
                 </div>
               </div>
             </div>
@@ -100,31 +133,33 @@ export function Register() {
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={isLoading}
               className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
-                loading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'
+                isLoading ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
               } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
             >
-              {loading ? (
-                <Loader2 className="animate-spin h-5 w-5" />
+              {isLoading ? (
+                <div className="flex items-center">
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  <span>Criando conta...</span>
+                </div>
               ) : (
-                <>
-                  <UserPlus className="h-5 w-5 mr-2" />
-                  Criar conta
-                </>
+                'Criar conta'
               )}
             </button>
           </div>
 
-          <div className="text-center">
-            <Link
-              to="/login"
-              className={`font-medium ${
-                theme === 'dark' ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'
-              }`}
-            >
-              Já tem uma conta? Entre aqui
-            </Link>
+          <div className="flex items-center justify-center">
+            <div className="text-sm">
+              <Link
+                to="/login"
+                className={`font-medium ${
+                  theme === 'dark' ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'
+                }`}
+              >
+                Já tem uma conta? Faça login
+              </Link>
+            </div>
           </div>
         </form>
       </div>

@@ -1,5 +1,14 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Route, 
+  Navigate, 
+  useNavigate, 
+  useLocation,
+  createRoutesFromElements,
+  createBrowserRouter,
+  RouterProvider,
+  Routes
+} from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Clients } from './pages/Clients';
@@ -30,19 +39,13 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session && !loading) {
-        // Redireciona mantendo a URL original como state
-        navigate('/login', { 
-          replace: true,
-          state: { from: location.pathname }
-        });
-      }
-    };
-
-    checkAuth();
-  }, [navigate, location, loading]);
+    if (!loading && !user) {
+      navigate('/login', { 
+        replace: true,
+        state: { from: location.pathname }
+      });
+    }
+  }, [user, loading, navigate, location]);
 
   if (loading) {
     return (
@@ -55,54 +58,72 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : null;
 }
 
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route>
+      {/* Rotas Públicas */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* Rotas Privadas */}
+      <Route
+        path="/*"
+        element={
+          <PrivateRoute>
+            <AuthProvider>
+              <ThemeProvider>
+                <ToastProvider>
+                  <FeedProvider>
+                    <ClientProvider>
+                      <TaskProvider>
+                        <BacklinkProvider>
+                          <MyBacklinksProvider>
+                            <KeywordProvider>
+                              <Layout>
+                                <Routes>
+                                  <Route path="/" element={<Dashboard />} />
+                                  <Route path="/clients" element={<Clients />} />
+                                  <Route path="/client/:id" element={<ClientDashboard />} />
+                                  <Route path="/tasks" element={<Tasks />} />
+                                  <Route path="/reports" element={<Reports />} />
+                                  <Route path="/settings" element={<Settings />} />
+                                  <Route path="/backlinks" element={<Backlinks />} />
+                                  <Route path="/my-backlinks" element={<MyBacklinks />} />
+                                  <Route path="*" element={<Navigate to="/" replace />} />
+                                </Routes>
+                              </Layout>
+                            </KeywordProvider>
+                          </MyBacklinksProvider>
+                        </BacklinkProvider>
+                      </TaskProvider>
+                    </ClientProvider>
+                  </FeedProvider>
+                </ToastProvider>
+              </ThemeProvider>
+            </AuthProvider>
+          </PrivateRoute>
+        }
+      />
+    </Route>
+  ),
+  {
+    future: {
+      v7_startTransition: true,
+      v7_relativeSplatPath: true
+    }
+  }
+);
+
 function App() {
   return (
-    <BrowserRouter>
+    <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-        <Routes>
-          {/* Rotas Públicas */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-
-          {/* Rotas Privadas */}
-          <Route
-            path="/*"
-            element={
-              <PrivateRoute>
-                <ClientProvider>
-                  <TaskProvider>
-                    <BacklinkProvider>
-                      <MyBacklinksProvider>
-                        <FeedProvider>
-                          <KeywordProvider>
-                            <Layout>
-                              <Routes>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route path="/clients" element={<Clients />} />
-                                <Route path="/client/:id" element={<ClientDashboard />} />
-                                <Route path="/tasks" element={<Tasks />} />
-                                <Route path="/reports" element={<Reports />} />
-                                <Route path="/settings" element={<Settings />} />
-                                <Route path="/backlinks" element={<Backlinks />} />
-                                <Route path="/my-backlinks" element={<MyBacklinks />} />
-                                <Route path="*" element={<Navigate to="/" replace />} />
-                              </Routes>
-                            </Layout>
-                          </KeywordProvider>
-                        </FeedProvider>
-                      </MyBacklinksProvider>
-                    </BacklinkProvider>
-                  </TaskProvider>
-                </ClientProvider>
-              </PrivateRoute>
-            }
-          />
-        </Routes>
+          <RouterProvider router={router} />
         </AuthProvider>
       </ToastProvider>
-    </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

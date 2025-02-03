@@ -17,6 +17,7 @@ export function Login() {
     setError('');
 
     try {
+      
       await login(email, password);
       // Aguarda um pequeno intervalo para garantir que o estado foi atualizado
       setTimeout(() => {

@@ -19,6 +19,8 @@ import { TaskViewModal } from '../components/TaskViewModal';
 import { useFeed } from '../contexts/FeedContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTasks } from '../contexts/TaskContext';
+import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
 
 interface Task {
   id: number;
@@ -77,38 +79,99 @@ export function Tasks() {
   const { showToast } = useToast();
   const { tasks, addTask, deleteTask, updateTask } = useTasks();
   const [isCreating, setIsCreating] = React.useState(false);
+  const [viewingTask, setViewingTask] = React.useState<Task | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const navigate = useNavigate();
+
+  // Verificar autenticação
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.log('Usuário não autenticado, redirecionando para login...');
+        showToast('error', 'Por favor, faça login para acessar suas tarefas');
+        navigate('/login');
+        return;
+      }
+      setIsAuthenticated(true);
+    };
+    checkAuth();
+  }, [navigate, showToast]);
+
+  // Log quando as tasks mudam
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      console.log('Tasks updated in Tasks component:', tasks);
+    }
+  }, [tasks, isAuthenticated]);
 
   const handleNewTask = async (taskData: Omit<Task, 'id' | 'status' | 'order'>) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
         showToast('error', 'Você precisa estar logado para criar tarefas');
         return;
       }
 
+      // Validar dados obrigatórios
+      if (!taskData.title?.trim() || !taskData.client?.trim() || !taskData.deadline || !taskData.priority || !taskData.type) {
+        showToast('error', 'Preencha todos os campos obrigatórios');
+        return;
+      }
+
+      // Calcular a ordem da nova tarefa
       const pendingTasks = tasks.filter(t => t.status === 'pendente');
-      const newTask = {
-        status: 'pendente',
-        order: pendingTasks.length,
+      const newOrder = pendingTasks.length;
+
+      const newTaskData = {
         ...taskData,
-        labels: taskData.labels || [],
-        user_id: user.id
+        status: 'pendente' as const,
+        order: newOrder,
+        title: taskData.title.trim(),
+        client: taskData.client.trim(),
+        deadline: new Date(taskData.deadline).toISOString(),
+        description: taskData.description?.trim() || '',
+        labels: Array.isArray(taskData.labels) ? taskData.labels : [],
+        time: taskData.time || null,
+        user_id: session.user.id
       };
       
-      await addTask(newTask);
+      console.log('Enviando dados da tarefa:', newTaskData);
       
-      addFeedItem({
-        type: 'task_pending',
-        taskTitle: newTask.title,
-        clientId: 1,
-        clientName: newTask.client,
-        status: 'pendente'
-      });
+      try {
+        const createdTask = await addTask(newTaskData);
+        console.log('Tarefa criada com sucesso:', createdTask);
+        
+        if (createdTask?.id) {
+          addFeedItem({
+            type: 'task_pending',
+            taskTitle: createdTask.title,
+            clientId: 1,
+            clientName: createdTask.client,
+            status: 'pendente'
+          });
 
-      showToast('success', 'Tarefa criada com sucesso!');
-    } catch (error) {
-      console.error('Erro ao criar tarefa:', error);
-      showToast('error', 'Erro ao criar tarefa');
+          showToast('success', 'Tarefa criada com sucesso!');
+          setIsCreating(false);
+        } else {
+          throw new Error('Erro ao criar tarefa: resposta inválida do servidor');
+        }
+      } catch (addError: any) {
+        console.error('Erro ao adicionar tarefa:', addError);
+        showToast('error', addError.message || 'Erro ao criar tarefa. Tente novamente.');
+        throw addError;
+      }
+    } catch (error: any) {
+      console.error('Erro ao processar tarefa:', error);
+      const errorMessage = error.message || 'Erro ao criar tarefa. Por favor, tente novamente.';
+      showToast('error', errorMessage);
+      
+      if (error.message?.includes('authentication') || error.message?.includes('auth')) {
+        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          showToast('error', 'Erro de autenticação. Por favor, faça login novamente.');
+        }
+      }
     }
   };
 
@@ -142,178 +205,130 @@ export function Tasks() {
     }
   };
 
-  const handleDragEnd = async (result: DropResult) => {
+  const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
 
-    const taskId = parseInt(result.draggableId);
-    const newStatus = result.destination.droppableId as 'pendente' | 'em_progresso' | 'concluida';
-    const oldStatus = result.source.droppableId;
-    
-    const taskToMove = tasks.find(t => t.id === taskId);
-    if (!taskToMove) return;
+    const { source, destination, draggableId } = result;
+    const taskId = parseInt(draggableId);
+    const task = tasks.find(t => t.id === taskId);
 
+    if (!task) return;
+
+    const newStatus = destination.droppableId as 'pendente' | 'em_progresso' | 'concluida';
+    
     try {
-      // Atualiza o status da tarefa movida
-      await updateTask(taskId, { 
+      await updateTask(taskId, {
         status: newStatus,
-        order: result.destination.index
+        updated_at: new Date().toISOString()
       });
 
-      // Atualiza a ordem das outras tarefas na coluna de destino
-      const tasksInDestination = tasks.filter(t => t.status === newStatus && t.id !== taskId);
-      for (let i = 0; i < tasksInDestination.length; i++) {
-        const task = tasksInDestination[i];
-        const newOrder = i >= result.destination.index ? i + 1 : i;
-        if (task.order !== newOrder) {
-          await updateTask(task.id, { order: newOrder });
-        }
-      }
-
-      // Atualiza a ordem das tarefas na coluna de origem se necessário
-      if (oldStatus !== newStatus) {
-        const tasksInSource = tasks.filter(t => t.status === oldStatus && t.id !== taskId);
-        for (let i = 0; i < tasksInSource.length; i++) {
-          const task = tasksInSource[i];
-          if (task.order !== i) {
-            await updateTask(task.id, { order: i });
-          }
-        }
-      }
-
-      const statusMap = {
-        pendente: 'Tarefa movida para Pendentes',
-        em_progresso: 'Tarefa movida para Em Progresso',
-        concluida: 'Tarefa movida para Concluídas'
-      };
-
-      showToast('success', statusMap[newStatus]);
-      
       addFeedItem({
         type: 'task_moved',
-        taskTitle: taskToMove.title,
+        taskTitle: task.title,
         clientId: 1,
-        clientName: taskToMove.client,
+        clientName: task.client,
         status: newStatus
       });
+
+      showToast('success', 'Tarefa movida com sucesso!');
     } catch (error) {
       console.error('Erro ao mover tarefa:', error);
       showToast('error', 'Erro ao mover tarefa');
     }
   };
 
-  const getColumnTasks = (status: Task['status']) => {
-    return tasks
-      .filter(task => task.status === status)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-  };
+  // Agrupar tarefas por status
+  const tasksByStatus = React.useMemo(() => {
+    return tasks.reduce((acc, task) => {
+      const status = task.status || 'pendente';
+      if (!acc[status]) {
+        acc[status] = [];
+      }
+      acc[status].push(task);
+      return acc;
+    }, {} as Record<string, Task[]>);
+  }, [tasks]);
 
   return (
-    <div>
+    <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            Tarefas
-          </h1>
-          <p className={`mt-1 text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-            Gerencie suas tarefas e projetos
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold">Tarefas</h1>
         <button
           onClick={() => setIsCreating(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
+          <Plus className="w-5 h-5 mr-2" />
           Nova Tarefa
         </button>
       </div>
+
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {columns.map(column => (
+            <div
+              key={column.id}
+              className={`rounded-lg p-4 ${
+                theme === 'dark' ? column.bgColor.dark : column.bgColor.light
+              }`}
+            >
+              <div className="flex items-center mb-4">
+                <column.icon className={`w-5 h-5 ${column.iconColor} mr-2`} />
+                <h2 className="text-lg font-semibold">{column.title}</h2>
+                <span className="ml-2 text-sm text-gray-500">
+                  ({tasksByStatus[column.id]?.length || 0})
+                </span>
+              </div>
+
+              <Droppable droppableId={column.id}>
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className="space-y-4"
+                  >
+                    {tasksByStatus[column.id]?.map((task, index) => (
+                      <Draggable
+                        key={task.id}
+                        draggableId={task.id.toString()}
+                        index={index}
+                      >
+                        {(provided) => (
+                          <TaskCard
+                            task={task}
+                            dragHandleProps={provided.dragHandleProps}
+                            onDelete={handleDeleteTask}
+                            onEdit={handleEditTask}
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                          />
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </div>
+          ))}
+        </div>
+      </DragDropContext>
 
       {isCreating && (
         <NewTaskModal
           isOpen={isCreating}
           onClose={() => setIsCreating(false)}
-          onSubmit={async (data) => {
-            try {
-              await handleNewTask(data);
-              setIsCreating(false);
-            } catch (error) {
-              console.error('Erro ao criar tarefa:', error);
-            }
-          }}
+          onSubmit={handleNewTask}
         />
       )}
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {columns.map(column => {
-            const columnTasks = getColumnTasks(column.id);
-            
-            return (
-              <div
-                key={column.id}
-                className={`rounded-lg shadow-sm overflow-hidden ${
-                  theme === 'dark' ? 'bg-[#2B2B2B]' : 'bg-white'
-                }`}
-              >
-                <div className={`p-4 ${
-                  theme === 'dark' ? column.bgColor.dark : column.bgColor.light
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <column.icon className={`w-5 h-5 ${column.iconColor}`} />
-                      <h2 className="font-semibold">{column.title}</h2>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-sm ${
-                      theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'
-                    }`}>
-                      {columnTasks.length}
-                    </span>
-                  </div>
-                </div>
-                <Droppable droppableId={column.id}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`p-4 space-y-3 min-h-[calc(100vh-300px)] transition-colors duration-200 ${
-                        snapshot.isDraggingOver && theme === 'dark'
-                          ? column.bgColor.dark
-                          : snapshot.isDraggingOver
-                          ? column.bgColor.light
-                          : ''
-                      }`}
-                    >
-                      {columnTasks.map((task, index) => (
-                        <Draggable
-                          key={task.id}
-                          draggableId={String(task.id)}
-                          index={index}
-                        >
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={`transform transition-transform duration-200 ${
-                                snapshot.isDragging ? 'rotate-2 scale-105' : ''
-                              }`}
-                            >
-                              <TaskCard
-                                task={task}
-                                dragHandleProps={provided.dragHandleProps}
-                                onDelete={handleDeleteTask}
-                                onEdit={handleEditTask}
-                              />
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </div>
-            );
-          })}
-        </div>
-      </DragDropContext>
+      {viewingTask && (
+        <TaskViewModal
+          task={viewingTask}
+          onClose={() => setViewingTask(null)}
+          onDelete={handleDeleteTask}
+          onEdit={handleEditTask}
+        />
+      )}
     </div>
   );
 }
@@ -474,24 +489,36 @@ function TaskCard({ task, dragHandleProps, onDelete, onEdit }: TaskCardProps) {
                   }`}>
                     {deadlineStatus === 'expired' ? (
                       <AlertCircle className={`w-4 h-4 ${
-                        theme === 'dark' ? 'text-red-400' : 'text-red-500'
+                        theme === 'dark'
+                          ? 'text-red-400'
+                          : 'text-red-500'
                       }`} />
                     ) : deadlineStatus === 'urgent' ? (
                       <Clock className={`w-4 h-4 ${
-                        theme === 'dark' ? 'text-orange-400' : 'text-orange-500'
+                        theme === 'dark'
+                          ? 'text-orange-400'
+                          : 'text-orange-500'
                       }`} />
                     ) : (
                       <AlertCircle className={`w-4 h-4 ${
-                        theme === 'dark' ? 'text-yellow-400' : 'text-yellow-500'
+                        theme === 'dark'
+                          ? 'text-yellow-400'
+                          : 'text-yellow-500'
                       }`} />
                     )}
                     <div className="flex flex-col">
                       <span className={`font-medium ${
                         deadlineStatus === 'expired'
-                          ? theme === 'dark' ? 'text-red-400' : 'text-red-700'
+                          ? theme === 'dark'
+                            ? 'text-red-400'
+                            : 'text-red-700'
                           : deadlineStatus === 'urgent'
-                          ? theme === 'dark' ? 'text-orange-400' : 'text-orange-700'
-                          : theme === 'dark' ? 'text-yellow-400' : 'text-yellow-700'
+                          ? theme === 'dark'
+                            ? 'text-orange-400'
+                            : 'text-orange-700'
+                          : theme === 'dark'
+                          ? 'text-yellow-400'
+                          : 'text-yellow-700'
                       }`}>
                         {deadlineStatus === 'expired'
                           ? 'Prazo Expirado'
@@ -501,10 +528,16 @@ function TaskCard({ task, dragHandleProps, onDelete, onEdit }: TaskCardProps) {
                       </span>
                       <span className={`text-xs ${
                         deadlineStatus === 'expired'
-                          ? theme === 'dark' ? 'text-red-300' : 'text-red-600'
+                          ? theme === 'dark'
+                            ? 'text-red-300'
+                            : 'text-red-600'
                           : deadlineStatus === 'urgent'
-                          ? theme === 'dark' ? 'text-orange-300' : 'text-orange-600'
-                          : theme === 'dark' ? 'text-yellow-300' : 'text-yellow-600'
+                          ? theme === 'dark'
+                            ? 'text-orange-300'
+                            : 'text-orange-600'
+                          : theme === 'dark'
+                          ? 'text-yellow-300'
+                          : 'text-yellow-600'
                       }`}>
                         {deadlineStatus === 'expired'
                           ? 'Esta tarefa está atrasada'

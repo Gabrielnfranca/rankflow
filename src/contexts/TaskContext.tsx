@@ -1,119 +1,101 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { Task } from '../types/Task';
 
-interface Task {
-  id: number;
-  title: string;
-  client: string;
-  deadline: string;
-  priority: 'Alta' | 'Média' | 'Baixa';
-  status: 'pendente' | 'em_progresso' | 'concluida';
-  type: 'SEO Técnico' | 'Keyword Research' | 'Backlinks' | 'Conteúdo';
-  description?: string;
-  order?: number;
-  labels?: Array<{ id: number; name: string; color: string }>;
-  color?: string;
-  time?: string;
-  completedAt?: string;
-  user_id: string; 
-}
-
-interface TaskContextType {
+interface TaskContextData {
   tasks: Task[];
-  addTask: (task: Omit<Task, 'id'>) => void;
-  updateTask: (id: number, updates: Partial<Task>) => void;
-  deleteTask: (id: number) => void;
+  loading: boolean;
+  error: string | null;
+  addTask: (task: Omit<Task, 'id' | 'created_at'>) => Promise<Task>;
+  updateTask: (id: number, task: Partial<Task>) => Promise<void>;
+  deleteTask: (id: number) => Promise<void>;
+  reorderTasks: (taskId: number, newOrder: number) => Promise<void>;
 }
 
-const TaskContext = createContext<TaskContextType | undefined>(undefined);
+const TaskContext = createContext<TaskContextData | undefined>(undefined);
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadTasks = async () => {
+    let mounted = true;
+    console.log('Setting up tasks context...');
+
+    async function loadTasks() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          console.error('Erro: Você precisa estar logado para visualizar tarefas');
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session?.user) {
+          if (mounted) {
+            setTasks([]);
+            setLoading(false);
+          }
           return;
         }
 
-        console.log('Carregando tarefas para usuário:', user.id);
-        const { data, error } = await supabase
+        const { data: tasksData, error: tasksError } = await supabase
           .from('tasks')
           .select('*')
-          .eq('user_id', user.id)
-          .order('order', { ascending: true });
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Erro ao carregar tarefas:', error);
+        if (tasksError) {
+          console.error('Erro ao carregar tarefas:', tasksError);
+          if (mounted) {
+            setError('Erro ao carregar tarefas');
+            setLoading(false);
+          }
           return;
         }
 
-        console.log('Tarefas carregadas:', data);
-        setTasks(data || []);
+        if (mounted) {
+          setTasks(tasksData || []);
+          setError(null);
+          setLoading(false);
+        }
       } catch (error) {
-        console.error('Erro ao carregar tarefas:', error);
+        console.error('Erro ao inicializar:', error);
+        if (mounted) {
+          setError('Erro ao carregar tarefas');
+          setLoading(false);
+        }
       }
-    };
+    }
 
-    // Carregar tarefas iniciais
     loadTasks();
 
-    // Configurar realtime subscription
-    const channel = supabase
+    const subscription = supabase
       .channel('tasks_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        (payload) => {
-          console.log('Mudança detectada:', payload);
-          loadTasks(); // Recarrega todas as tarefas quando houver mudança
-        }
-      )
-      .subscribe((status) => {
-        console.log('Status da subscription:', status);
-      });
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'tasks',
+        filter: `user_id=eq.${supabase.auth.getSession().then(({ data }) => data.session?.user?.id)}`
+      }, (payload) => {
+        console.log('Change received!', payload);
+        loadTasks();
+      })
+      .subscribe();
 
-    // Cleanup subscription
     return () => {
-      console.log('Limpando subscription');
-      channel.unsubscribe();
+      mounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
-  const addTask = async (task: Omit<Task, 'id'>) => {
+  const addTask = async (task: Omit<Task, 'id' | 'created_at'>): Promise<Task> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Você precisa estar logado para criar tarefas');
-      }
-
-      console.log('Iniciando criação de tarefa:', task);
-
-      // Garante que a ordem está correta
-      const { data: existingTasks } = await supabase
-        .from('tasks')
-        .select('order')
-        .eq('status', task.status)
-        .eq('user_id', user.id)
-        .order('order', { ascending: true });
-
-      const order = existingTasks?.length || 0;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Usuário não autenticado');
 
       const newTask = {
         ...task,
-        user_id: user.id,
-        order,
+        user_id: session.user.id,
+        status: task.status || 'pendente',
         created_at: new Date().toISOString()
       };
-
-      console.log('Enviando nova tarefa para o Supabase:', newTask);
 
       const { data, error } = await supabase
         .from('tasks')
@@ -121,42 +103,31 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single();
 
-      if (error) {
-        console.error('Erro do Supabase ao criar tarefa:', error);
-        throw error;
-      }
-
-      console.log('Tarefa criada com sucesso:', data);
-
-      setTasks(prev => [...prev, data].sort((a, b) => (a.order || 0) - (b.order || 0)));
-
+      if (error) throw error;
+      
+      setTasks(current => [data, ...current]);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao adicionar tarefa:', error);
       throw error;
     }
   };
 
-  const updateTask = async (id: number, updates: Partial<Task>) => {
+  const updateTask = async (id: number, task: Partial<Task>) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Você precisa estar logado para atualizar tarefas');
-      }
-
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('tasks')
-        .update(updates)
+        .update({
+          ...task,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
-        .eq('user_id', user.id);
+        .select()
+        .single();
 
       if (error) throw error;
-
-      setTasks(prev =>
-        prev.map(task => (task.id === id ? { ...task, ...updates } : task))
-           .sort((a, b) => (a.order || 0) - (b.order || 0))
-      );
-    } catch (error) {
+      setTasks(current => current.map(t => t.id === id ? { ...t, ...data } : t));
+    } catch (error: any) {
       console.error('Erro ao atualizar tarefa:', error);
       throw error;
     }
@@ -164,46 +135,50 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = async (id: number) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Você precisa estar logado para deletar tarefas');
-      }
-
-      const taskToDelete = tasks.find(t => t.id === id);
-      if (!taskToDelete) throw new Error('Tarefa não encontrada');
-
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('id', id);
 
       if (error) throw error;
-
-      // Atualiza a ordem das tarefas restantes
-      const tasksInSameStatus = tasks.filter(t => 
-        t.status === taskToDelete.status && t.id !== id
-      );
-
-      for (let i = 0; i < tasksInSameStatus.length; i++) {
-        const task = tasksInSameStatus[i];
-        if (task.order !== i) {
-          await updateTask(task.id, { order: i });
-        }
-      }
-
-      setTasks(prev => 
-        prev.filter(task => task.id !== id)
-           .sort((a, b) => (a.order || 0) - (b.order || 0))
-      );
-    } catch (error) {
+      setTasks(current => current.filter(t => t.id !== id));
+    } catch (error: any) {
       console.error('Erro ao deletar tarefa:', error);
       throw error;
     }
   };
 
+  const reorderTasks = async (taskId: number, newOrder: number) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ order: newOrder })
+        .eq('id', taskId);
+
+      if (error) throw error;
+      setTasks(current => {
+        const updated = current.map(t => {
+          if (t.id === taskId) return { ...t, order: newOrder };
+          return t;
+        });
+        return updated.sort((a, b) => (a.order || 0) - (b.order || 0));
+      });
+    } catch (error: any) {
+      console.error('Erro ao reordenar tarefa:', error);
+      throw error;
+    }
+  };
+
   return (
-    <TaskContext.Provider value={{ tasks, addTask, updateTask, deleteTask }}>
+    <TaskContext.Provider value={{
+      tasks,
+      loading,
+      error,
+      addTask,
+      updateTask,
+      deleteTask,
+      reorderTasks
+    }}>
       {children}
     </TaskContext.Provider>
   );
